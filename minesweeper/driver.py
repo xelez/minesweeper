@@ -32,7 +32,7 @@ class Scoreboard:
 
         if not os.path.exists(filename):
             LOGGER.info('Scoreboard file is missing and will be created')
-            with open(filename, 'w') as f:
+            with open(filename, 'x') as f:
                 json.dump({}, f)
 
         with open(filename) as f:
