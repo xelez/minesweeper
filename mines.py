@@ -25,7 +25,13 @@ except Exception as e:
     sys.exit(ERROR_MODULES_MISSING)
 
 try:
-    from PyQt5 import QtGui, QtCore, QtWidgets, QtWebKitWidgets
+    from PyQt5 import QtGui, QtCore, QtWidgets
+
+    QT_VERSION = tuple(map(int, QtCore.QT_VERSION_STR.split('.')))
+    if QT_VERSION < (5, 6):
+        from PyQt5.QtWebKitWidgets import QWebView
+    else:
+        from PyQt5.QtWebEngineWidgets import QWebEngineView as QWebView
 except Exception as e:
     print('PyQt5 not found: "{}". Use console version (cmines)'.format(e),
           file=sys.stderr)
@@ -356,7 +362,7 @@ class HiScoresWindow(QtWidgets.QDialog):
         self._scores = scoreboard
         self._config = config
 
-        self._viewer = QtWebKitWidgets.QWebView()
+        self._viewer = QWebView()
 
         self._btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok)
         self._btns.accepted.connect(self.close)
