@@ -8,8 +8,8 @@ ERROR_MODULES_MISSING = 4
 
 import sys
 
-if sys.version_info < (3, 4):
-    print('Use python >= 3.4', file=sys.stderr)
+if sys.version_info < (3, 6):
+    print('Use python >= 3.6', file=sys.stderr)
     sys.exit(ERROR_PYTHON_VERSION)
 
 import argparse
@@ -29,7 +29,7 @@ except Exception as e:
     sys.exit(ERROR_MODULES_MISSING)
 
 
-__version__ = '1.0'
+__version__ = '1.1'
 __author__ = 'Samun Victor'
 __email__ = 'victor.samun@gmail.com'
 

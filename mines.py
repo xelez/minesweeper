@@ -9,8 +9,8 @@ ERROR_QT_VERSION = 5
 
 import sys
 
-if sys.version_info < (3, 4):
-    print('Use python >= 3.4', file=sys.stderr)
+if sys.version_info < (3, 6):
+    print('Use python >= 3.6', file=sys.stderr)
     sys.exit(ERROR_PYTHON_VERSION)
 
 import argparse
@@ -26,19 +26,14 @@ except Exception as e:
 
 try:
     from PyQt5 import QtGui, QtCore, QtWidgets
-
-    QT_VERSION = tuple(map(int, QtCore.QT_VERSION_STR.split('.')))
-    if QT_VERSION < (5, 6):
-        from PyQt5.QtWebKitWidgets import QWebView
-    else:
-        from PyQt5.QtWebEngineWidgets import QWebEngineView as QWebView
+    from PyQt5.QtWebEngineWidgets import QWebEngineView
 except Exception as e:
     print('PyQt5 not found: "{}". Use console version (cmines)'.format(e),
           file=sys.stderr)
     sys.exit(ERROR_QT_VERSION)
 
 
-__version__ = '1.0'
+__version__ = '1.1'
 __author__ = 'Samun Victor'
 __email__ = 'victor.samun@gmail.com'
 
@@ -60,8 +55,10 @@ def is_active(game_driver):
 def temp_painter(device):
     painter = QtGui.QPainter()
     painter.begin(device)
-    yield painter
-    painter.end()
+    try:
+        yield painter
+    finally:
+        painter.end()
 
 
 class GuiField(QtWidgets.QFrame):
@@ -362,7 +359,7 @@ class HiScoresWindow(QtWidgets.QDialog):
         self._scores = scoreboard
         self._config = config
 
-        self._viewer = QWebView()
+        self._viewer = QWebEngineView()
 
         self._btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok)
         self._btns.accepted.connect(self.close)
