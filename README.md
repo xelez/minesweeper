@@ -3,7 +3,7 @@
 
 Автор: Самунь Виктор (victor.samun@gmail.com)
 
-Ревью выполнили: [Азовсков Сергей] (https://github.com/last-g), [Берсенёв Александр] (https://github.com/alexbers)
+Ревью выполнили: [Азовсков Сергей](https://github.com/last-g), [Берсенёв Александр](https://github.com/alexbers)
 
 
 ## Описание
