@@ -1,10 +1,7 @@
 import copy
-import os
-import sys
-import unittest
+import operator
+import unittest.mock
 
-sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                             os.path.pardir))
 from minesweeper.game import Field, CellState, GameState
 
 
@@ -150,25 +147,23 @@ class GameStateTest(unittest.TestCase):
                             GameState(Field.generate((2, 2), 2)))
 
     def test_clone(self):
-        calls = 0
-
-        def handler(*args):
-            nonlocal calls
-            calls += 1
-
+        handler = unittest.mock.MagicMock()
         state = GameState(Field.generate((10, 15), 21))
         state.add_cell_handler(handler)
 
         state2 = copy.copy(state)
         self.assertEqual(state, state2)
+
         state2.set_flag((0, 0))
         self.assertNotEqual(state, state2)
-        self.assertEqual(1, calls)
+        handler.assert_called_once()
+
         state2.remove_cell_handler(handler)
         state2.set_flag((1, 0))
-        self.assertEqual(1, calls)
+        handler.assert_called_once()
+
         state.set_flag((5, 0))
-        self.assertEqual(2, calls)
+        self.assertEqual(2, handler.call_count)
 
     def test_init_state(self):
         field = Field((2, 2), {(0, 0), (1, 1)})
@@ -230,34 +225,34 @@ class GameStateTest(unittest.TestCase):
 
     def test_handler_flag(self):
         state = GameState(Field.generate((5, 5), 8))
-        callargs = []
-        state.add_cell_handler(lambda *args: callargs.append(args))
+        handler = unittest.mock.MagicMock()
+        state.add_cell_handler(handler)
 
         state.set_flag((2, 4))
-        self.assertEqual(1, len(callargs))
-        self.assertEqual(((2, 4), CellState.FLAG), callargs[-1])
+        handler.assert_called_once()
+        handler.assert_called_with((2, 4), CellState.FLAG)
 
         state.set_flag((2, 4))
-        self.assertEqual(1, len(callargs))
+        handler.assert_called_once()
 
         state.unset_flag((2, 4))
-        self.assertEqual(2, len(callargs))
-        self.assertEqual(((2, 4), CellState.UNKNOWN), callargs[-1])
+        self.assertEqual(2, handler.call_count)
+        handler.assert_called_with((2, 4), CellState.UNKNOWN)
 
     def test_handler_open(self):
         state = GameState(Field((3, 3), {(1, 0)}))
-        callargs = []
-        state.add_cell_handler(lambda *args: callargs.append(args))
+        handler = unittest.mock.MagicMock()
+        state.add_cell_handler(handler)
 
         state.open_cell((0, 0))
-        self.assertEqual(1, len(callargs))
-        self.assertEqual(((0, 0), CellState.OPENED), callargs[-1])
+        handler.assert_called_once()
+        handler.assert_called_with((0, 0), CellState.OPENED)
 
         state.open_cell((2, 2))
-        self.assertEqual(7, len(callargs))
+        self.assertEqual(7, handler.call_count)
         self.assertSetEqual(
             {((x, y), CellState.OPENED) for x in (0, 1, 2) for y in (1, 2)},
-            set(callargs[1:]))
+            set(map(operator.itemgetter(0), handler.call_args_list[1:])))
 
     def test_handler_load(self):
         field = Field((3, 3), {(1, 0)})
@@ -265,29 +260,26 @@ class GameStateTest(unittest.TestCase):
         state.set_flag((0, 0))
         state.open_cell((2, 2))
 
-        callargs = []
-        loaded = GameState.fromstr(str(state), field,
-                                   lambda *args: callargs.append(args))
+        handler = unittest.mock.MagicMock()
+        GameState.fromstr(str(state), field, handler)
 
-        self.assertEqual(7, len(callargs))
+        self.assertEqual(7, handler.call_count)
         self.assertSetEqual(
             {((x, y), CellState.OPENED) for x in (0, 1, 2) for y in (1, 2)} |
             {((0, 0), CellState.FLAG)},
-            set(callargs))
+            set(map(operator.itemgetter(0), handler.call_args_list)))
 
     def test_handler_remove(self):
         state = GameState(Field.generate((2, 2), 2))
 
-        callargs = []
-        handler = lambda *args: callargs.append(args)
-
+        handler = unittest.mock.MagicMock()
         state.add_cell_handler(handler)
         state.set_flag((0, 0))
-        self.assertEqual(1, len(callargs))
+        handler.assert_called_once()
 
         state.remove_cell_handler(handler)
         state.set_flag((1, 1))
-        self.assertEqual(1, len(callargs))
+        handler.assert_called_once()
 
     def test_open_cell(self):
         field = Field((4, 3), {(0, 0), (2, 0)})

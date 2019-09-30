@@ -1,14 +1,11 @@
-from contextlib import contextmanager
 import os
 import logging
 import stat
 import sys
 import time
 import tempfile
-import unittest
+import unittest.mock
 
-sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                             os.path.pardir))
 from minesweeper.game import Field, CellState
 from minesweeper.driver import Minesweeper, Scoreboard, EventTypes
 from minesweeper import driver
@@ -131,12 +128,8 @@ class ScoreboardTest(unittest.TestCase):
         os.remove(self.fn)
 
 
-@contextmanager
 def patch_field_generator(field):
-    prev_gen = Field.generate
-    Field.generate = lambda *args: field
-    yield
-    Field.generate = prev_gen
+    return unittest.mock.patch.object(Field, 'generate', return_value=field)
 
 
 class MinesweeperTest(unittest.TestCase):
@@ -237,45 +230,42 @@ class MinesweeperTest(unittest.TestCase):
             self.assertEqual(6, counter[EventTypes.END_CHANGE])
 
     def test_handler_decorator(self):
-        callargs = []
-
-        @self.game.event_handler(EventTypes.NEW_GAME)
-        def handler(*args):
-            callargs.append(args)
+        handler = unittest.mock.MagicMock()
+        self.game.event_handler(EventTypes.NEW_GAME)(handler)
 
         self.game.new_game((5, 5), 10)
-        self.assertListEqual([((5, 5), 10)], callargs)
+        handler.assert_called_with((5, 5), 10)
 
     def test_open_cell(self):
-        callargs = []
-        self.game.add_event_handler(EventTypes.CELL_CHANGED,
-                                    lambda *args: callargs.append(args))
+        handler = unittest.mock.MagicMock()
+        self.game.add_event_handler(EventTypes.CELL_CHANGED, handler)
 
         self.game.open_cell((0, 0))
-        self.assertListEqual([], callargs)
+        handler.assert_not_called()
 
         with patch_field_generator(Field((4, 3), {(0, 0), (2, 0)})):
             self.game.new_game((4, 3), 2)
 
         self.game.open_cell((3, 2))
-        self.assertEqual(8, len(callargs))
+        self.assertEqual(8, handler.call_count)
         self.assertSetEqual(
-            {e[0] for e in callargs if e[1] == CellState.OPENED},
+            {e[0] for (e, _) in handler.call_args_list
+             if e[1] == CellState.OPENED},
             {(x, y) for x in (0, 1, 2, 3) for y in (1, 2)})
 
         self.game.again()
-        callargs = []
+
+        handler.reset_mock()
         self.game.open_cell(('3', '2'))
-        self.assertEqual(8, len(callargs))
+        self.assertEqual(8, handler.call_count)
 
         self.assertFalse(self.game.is_win())
         self.game.open_cell((3, 2))
-        self.assertEqual(8, len(callargs))
+        self.assertEqual(8, handler.call_count)
 
     def test_autocomplete(self):
-        callargs = []
-        self.game.add_event_handler(EventTypes.CELL_CHANGED,
-                                    lambda *args: callargs.append(args))
+        handler = unittest.mock.MagicMock()
+        self.game.add_event_handler(EventTypes.CELL_CHANGED, handler)
 
         with patch_field_generator(Field((3, 3), {(0, 0), (2, 0)})):
             self.game.new_game((3, 3), 2)
@@ -289,7 +279,8 @@ class MinesweeperTest(unittest.TestCase):
         self.game.open_cell((1, 0), True)
         self.assertTrue(self.game.is_win())
         self.assertSetEqual({(0, 0), (2, 0)},
-                            {e[0] for e in callargs if e[1] == CellState.FLAG})
+                            {e[0] for (e, _) in handler.call_args_list
+                             if e[1] == CellState.FLAG})
 
         self.game.again()
         self.game.invert_flag((1, 0))
@@ -316,17 +307,16 @@ class MinesweeperTest(unittest.TestCase):
         with patch_field_generator(Field((2, 2), {(0, 0)})):
             self.game.new_game((2, 2), 1)
 
-        callargs = []
-        self.game.add_event_handler(EventTypes.CELL_CHANGED,
-                                    lambda *args: callargs.append(args))
+        handler = unittest.mock.MagicMock()
+        self.game.add_event_handler(EventTypes.CELL_CHANGED, handler)
 
         self.game.open_cell((1, 1))
         state = self.game.get_state()
         self.assertEqual(CellState.OPENED, state.get_state((1, 1)))
 
-        self.assertEqual(1, len(callargs))
+        handler.assert_called_once()
         state.open_cell((1, 0))
-        self.assertEqual(1, len(callargs))
+        handler.assert_called_once()
         state.set_flag((0, 0))
         self.assertEqual(0, self.game.flags())
 
@@ -373,23 +363,22 @@ class MinesweeperTest(unittest.TestCase):
                     os.remove(name)
 
     def test_flags(self):
-        callargs = []
-        self.game.add_event_handler(EventTypes.CELL_CHANGED,
-                                    lambda *args: callargs.append(args))
+        handler = unittest.mock.MagicMock()
+        self.game.add_event_handler(EventTypes.CELL_CHANGED, handler)
 
         self.game.invert_flag((0, 0))
-        self.assertListEqual([], callargs)
+        handler.assert_not_called()
 
         with patch_field_generator(Field((4, 3), {(0, 0), (2, 0)})):
             self.game.new_game((4, 3), 2)
 
         self.game.invert_flag((0, 2))
-        self.assertListEqual([((0, 2), CellState.FLAG)], callargs)
+        handler.assert_called_with((0, 2), CellState.FLAG)
         self.game.open_cell((3, 2))
-        self.assertEqual(8, len(callargs))
+        self.assertEqual(8, handler.call_count)
 
         self.game.invert_flag(('0', '2'))
-        self.assertEqual(((0, 2), CellState.UNKNOWN), callargs[-1])
+        handler.assert_called_with((0, 2), CellState.UNKNOWN)
 
         self.game.invert_flag((0, 0))
         self.assertFalse(self.game.is_lose())
@@ -397,27 +386,25 @@ class MinesweeperTest(unittest.TestCase):
         self.assertFalse(self.game.is_lose())
 
     def test_new_game_handler(self):
-        callargs = []
-        self.game.add_event_handler(EventTypes.NEW_GAME,
-                                    lambda *args: callargs.append(args))
+        handler = unittest.mock.MagicMock()
+        self.game.add_event_handler(EventTypes.NEW_GAME, handler)
 
         self.game.new_game((4, 3), 2)
-        self.assertEqual(((4, 3), 2), callargs[0])
+        handler.assert_called_with((4, 3), 2)
 
         self.game.new_game((8, 8), 10)
-        self.assertEqual(((8, 8), 10), callargs[1])
+        handler.assert_called_with((8, 8), 10)
 
         self.game.again()
-        self.assertEqual(((8, 8), 10), callargs[2])
+        handler.assert_called_with((8, 8), 10)
 
         self.game.new_game((5, 4), 7)
-        self.assertEqual(((5, 4), 7), callargs[3])
+        handler.assert_called_with((5, 4), 7)
 
         self.game.again()
-        self.assertEqual(((5, 4), 7), callargs[4])
+        handler.assert_called_with((5, 4), 7)
 
-        self.game.again()
-        self.assertEqual(((5, 4), 7), callargs[5])
+        handler.assert_called_with((5, 4), 7)
 
     def test_again(self):
         with patch_field_generator(Field((2, 2), {(0, 0)})):
@@ -447,56 +434,53 @@ class MinesweeperTest(unittest.TestCase):
         with patch_field_generator(field):
             self.game.new_game((3, 3), 2)
 
-        callargs = []
-        self.game.add_event_handler(EventTypes.PLAYER_WIN,
-                                    lambda *args: callargs.append(args))
+        handler = unittest.mock.MagicMock()
+        self.game.add_event_handler(EventTypes.PLAYER_WIN, handler)
 
         self.game.open_cell((1, 2))
         self.assertFalse(self.game.is_win())
-        self.assertListEqual([], callargs)
+        handler.assert_not_called()
 
         self.game.open_cell((1, 0))
         self.assertFalse(self.game.is_win())
-        self.assertListEqual([], callargs)
+        handler.assert_not_called()
 
         self.game.invert_flag((0, 0))
         self.game.invert_flag((2, 0))
         self.assertTrue(self.game.is_win())
         self.assertTrue(self.game.saved())
-        self.assertListEqual([(field,)], callargs)
+        handler.assert_called_with(field)
 
     def test_lose(self):
         field = Field((3, 3), {(0, 0), (2, 0)})
         with patch_field_generator(field):
             self.game.new_game((3, 3), 2)
 
-        callargs = []
-        self.game.add_event_handler(EventTypes.PLAYER_LOSE,
-                                    lambda *args: callargs.append(args))
+        handler = unittest.mock.MagicMock()
+        self.game.add_event_handler(EventTypes.PLAYER_LOSE, handler)
 
         self.game.open_cell((1, 2))
         self.assertFalse(self.game.is_lose())
-        self.assertListEqual([], callargs)
+        handler.assert_not_called()
 
         self.game.open_cell((0, 0))
         self.assertTrue(self.game.is_lose())
         self.assertTrue(self.game.saved())
-        self.assertListEqual([(field, (0, 0))], callargs)
+        handler.assert_called_with(field, (0, 0))
 
     def test_undo_redo(self):
         with patch_field_generator(Field((4, 3), {(0, 0), (3, 1)})):
             self.game.new_game((4, 3), 2)
 
-        callargs = []
-        self.game.add_event_handler(EventTypes.CELL_CHANGED,
-                                    lambda *args: callargs.append(args))
+        handler = unittest.mock.MagicMock()
+        self.game.add_event_handler(EventTypes.CELL_CHANGED, handler)
 
         self.assertFalse(self.game.can_undo())
         self.assertFalse(self.game.can_redo())
 
         self.game.undo()
         self.game.redo()
-        self.assertListEqual([], callargs)
+        handler.assert_not_called()
 
         with self.subTest('flags'):
             self.game.invert_flag((0, 0))
@@ -517,7 +501,7 @@ class MinesweeperTest(unittest.TestCase):
             self.game.redo()
             self.assertEqual(1, self.game.flags())
 
-            self.assertEqual(5, len(callargs))
+            self.assertEqual(5, handler.call_count)
 
         with self.subTest('again'):
             self.assertTrue(self.game.can_undo() or self.game.can_redo())
@@ -532,23 +516,27 @@ class MinesweeperTest(unittest.TestCase):
 
         with self.subTest('open'):
             self.game.again()
-            callargs = []
+            handler.reset_mock()
             self.game.open_cell((2, 0))
             self.game.open_cell((0, 2))
             self.game.open_cell((1, 0))
             self.assertTrue(self.game.can_undo())
             self.game.undo()
-            self.assertEqual(CellState.UNKNOWN, callargs[-1][1])
-            self.assertEqual(CellState.OPENED, callargs[-2][1])
+
+            self.assertListEqual(
+                [CellState.OPENED, CellState.UNKNOWN],
+                [x[1] for (x, _) in handler.call_args_list[-2:]])
 
             self.assertTrue(self.game.can_undo())
             self.game.undo()
-            self.assertListEqual([CellState.UNKNOWN]*6,
-                                 [x[1] for x in callargs[-6:]])
+            self.assertListEqual(
+                [CellState.UNKNOWN]*6,
+                [x[1] for (x, _) in handler.call_args_list[-6:]])
 
             self.game.redo()
-            self.assertListEqual([CellState.OPENED]*6,
-                                 [x[1] for x in callargs[-6:]])
+            self.assertListEqual(
+                [CellState.OPENED]*6,
+                [x[1] for (x, _) in handler.call_args_list[-6:]])
 
             self.assertTrue(self.game.can_redo())
             self.game.open_cell((1, 2))
@@ -641,21 +629,24 @@ class MinesweeperTest(unittest.TestCase):
             self.assertTrue(self.game.saved())
             self.game.new_game((5, 5), 10)
 
-            callargs = []
+            handler = unittest.mock.MagicMock()
             for evt_type in (EventTypes.NEW_GAME, EventTypes.CELL_CHANGED):
-                self.game.add_event_handler(
-                    evt_type, lambda *args: callargs.append(args))
+                self.game.add_event_handler(evt_type, handler)
 
             self.game.load_game(name)
-            self.assertEqual(((4, 3), 2), callargs[0])
+            self.assertEqual(unittest.mock.call((4, 3), 2),
+                             handler.call_args_list[0])
             self.assertSetEqual(
-                {(0, 0)}, {x[0] for x in callargs if x[1] == CellState.FLAG})
+                {(0, 0)}, {x[0] for (x, _) in handler.call_args_list
+                           if x[1] == CellState.FLAG})
             self.assertSetEqual(
                 {(x, y) for x in (0, 1, 2) for y in (1, 2)},
-                {x[0] for x in callargs if x[1] == CellState.OPENED})
+                {x[0] for (x, _) in handler.call_args_list
+                 if x[1] == CellState.OPENED})
             self.assertSetEqual(
                 {(1, 0), (2, 0), (3, 0), (3, 1), (3, 2)},
-                {x[0] for x in callargs if x[1] == CellState.UNKNOWN})
+                {x[0] for (x, _) in handler.call_args_list
+                 if x[1] == CellState.UNKNOWN})
             self.assertGreaterEqual(self.game.get_time(), 30)
             self.assertTrue(self.game.can_undo())
         finally:
