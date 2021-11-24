@@ -16,10 +16,10 @@
 name: Run tests and show coverage
 
 on:
-  push: # на пуш в ветку. $default-branch автоматически подставится в main или другую ветку, которая отмечена в настройках как главная).
-    branches: [ $default-branch ]
-  pull_request: # На PR'ы в $default-branch
-    branches: [ $default-branch ]
+  push:
+    branches: [ master ]
+  pull_request: 
+    branches: [ master ]
 
 jobs:
   build:
@@ -48,6 +48,6 @@ jobs:
       run: |
         pytest
     - name: Check coverage
-      # Здесь -cov=minesweeper выбирает директорию, для которой считать покрытие тестами
+      # Здесь --cov=minesweeper выбирает директорию, для которой считать покрытие тестами
       run: |
-        pytest -cov=minesweeper
+        pytest --cov=minesweeper
